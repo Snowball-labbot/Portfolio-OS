@@ -16,8 +16,8 @@ data/*
 !data/.gitkeep
 runtime-package/bin/
 runtime-package/*.tgz
-dsh-plugin/*.tgz
-dsh-plugin/vendor/
+plugins/dsh-portfolio-os/*.tgz
+plugins/dsh-portfolio-os/vendor/
 RELEASE-SHA256SUMS.txt
 *.db
 *.db-shm

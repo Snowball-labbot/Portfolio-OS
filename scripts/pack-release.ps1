@@ -5,7 +5,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 & $Python (Join-Path $PSScriptRoot "check-release-safety.py")
 & (Join-Path $PSScriptRoot "build-runtime.ps1") -Python $Python
 
-$PluginVendor = Join-Path $Root "dsh-plugin\vendor"
+$PluginVendor = Join-Path $Root "plugins\dsh-portfolio-os\vendor"
 $ResolvedRoot = [IO.Path]::GetFullPath($Root)
 $ResolvedVendor = [IO.Path]::GetFullPath($PluginVendor)
 if (-not $ResolvedVendor.StartsWith($ResolvedRoot, [StringComparison]::OrdinalIgnoreCase)) {
@@ -22,7 +22,7 @@ Copy-Item -LiteralPath (Join-Path $Root "runtime-package\bin\portfolio-os-runtim
 Push-Location (Join-Path $Root "runtime-package")
 try { npm pack } finally { Pop-Location }
 
-Push-Location (Join-Path $Root "dsh-plugin")
+Push-Location (Join-Path $Root "plugins\dsh-portfolio-os")
 try {
   npm test
   npm pack
@@ -30,7 +30,7 @@ try {
 
 $Artifacts = @(
   Get-ChildItem (Join-Path $Root "runtime-package\*.tgz") -File
-  Get-ChildItem (Join-Path $Root "dsh-plugin\*.tgz") -File
+  Get-ChildItem (Join-Path $Root "plugins\dsh-portfolio-os\*.tgz") -File
 )
 $Checksums = foreach ($Artifact in $Artifacts) {
   $Hash = (Get-FileHash -LiteralPath $Artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()

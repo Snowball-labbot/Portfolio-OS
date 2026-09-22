@@ -32,7 +32,7 @@ jobs:
           npm run lint
           python -m pip install -r backend/requirements-marketplace.txt pytest
           python -m pytest backend/tests/test_ai_settings.py backend/tests/test_auth_cookie.py backend/tests/test_portfolio_safety.py backend/tests/test_research_logic.py -q
-          Push-Location dsh-plugin
+          Push-Location plugins/dsh-portfolio-os
           npm test
           Pop-Location
       - name: Build runtime and npm packages
@@ -43,7 +43,7 @@ jobs:
           name: portfolio-os-marketplace-windows
           path: |
             runtime-package/*.tgz
-            dsh-plugin/*.tgz
+            plugins/dsh-portfolio-os/*.tgz
             RELEASE-SHA256SUMS.txt
           if-no-files-found: error
 
@@ -53,5 +53,5 @@ jobs:
         with:
           files: |
             runtime-package/*.tgz
-            dsh-plugin/*.tgz
+            plugins/dsh-portfolio-os/*.tgz
             RELEASE-SHA256SUMS.txt
