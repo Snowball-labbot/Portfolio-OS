@@ -1,0 +1,25 @@
+{
+  "name": "dsh-portfolio-os",
+  "version": "0.2.1",
+  "description": "Install-and-run Portfolio OS inside DSH Desktop without Docker.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["index.js", "client.js", "cordis.patch.yml", "README.md", "vendor"],
+  "keywords": ["dsh-plugin", "deepseek-harness", "portfolio", "investment-research"],
+  "dsh": {
+    "engines": { "dsh": ">=0.1.2-rc.1 <0.2.0" },
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-connection"]
+    }
+  },
+  "scripts": { "test": "node --test tests/plugin.node.mjs" },
+  "engines": { "node": ">=22" },
+  "license": "MIT"
+}

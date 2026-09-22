@@ -1,0 +1,8 @@
+- insert:
+    - id: dsh-portfolio-os
+      name: dsh-portfolio-os
+      config:
+        port: 41731
+        autoStart: true
+        keepRunningOnExit: true
+        startupTimeoutSeconds: 90

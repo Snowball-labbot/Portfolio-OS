@@ -1,0 +1,9 @@
+{
+  "name": "@snowball-labbot/portfolio-os-win32-x64",
+  "version": "0.2.1",
+  "description": "Windows x64 native runtime for Portfolio OS DSH plugin.",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": ["bin", "README.md"],
+  "license": "MIT"
+}
