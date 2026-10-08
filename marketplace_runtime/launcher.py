@@ -28,13 +28,27 @@ def _runtime_config(data_dir: Path) -> dict:
     return config
 
 
-def _configure_environment(port: int, data_dir: Path, config: dict) -> None:
+def resolve_cookie_policy(configured_samesite: str | None, configured_secure: bool | None) -> tuple[str, bool]:
+    samesite = (configured_samesite or os.getenv("SESSION_COOKIE_SAMESITE") or "lax").strip().lower()
+    if samesite not in {"lax", "strict", "none"}:
+        raise SystemExit(f"Unsupported SameSite value: {samesite}")
+    if configured_secure is None:
+        default = "true" if samesite == "none" else "false"
+        secure = os.getenv("SESSION_COOKIE_SECURE", default).strip().lower() in {"1", "true", "yes"}
+    else:
+        secure = configured_secure
+    if samesite == "none" and not secure:
+        raise SystemExit("SameSite=None requires a Secure session cookie")
+    return samesite, secure
+
+
+def _configure_environment(port: int, data_dir: Path, config: dict, cookie_samesite: str, cookie_secure: bool) -> None:
     os.environ["PORTFOLIO_OS_DATA_DIR"] = str(data_dir)
     os.environ["DATABASE_URL"] = f"sqlite:///{(data_dir / 'data' / 'portfolio.db').as_posix()}"
     os.environ["SESSION_SECRET"] = config["session_secret"]
     os.environ["APP_ORIGIN"] = f"http://127.0.0.1:{port}"
-    os.environ["SESSION_COOKIE_SECURE"] = "false"
-    os.environ["SESSION_COOKIE_SAMESITE"] = "lax"
+    os.environ["SESSION_COOKIE_SECURE"] = "true" if cookie_secure else "false"
+    os.environ["SESSION_COOKIE_SAMESITE"] = cookie_samesite
     os.environ.setdefault("ALLOW_OPEN_REGISTRATION", "true")
     bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
     os.environ.setdefault("PORTFOLIO_OS_STATIC_DIR", str(bundle_root / "frontend-dist"))
@@ -52,11 +66,30 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Portfolio OS local marketplace runtime")
     parser.add_argument("--port", type=int, default=41731)
     parser.add_argument("--data-dir", help="Directory for the local database, encrypted settings, and logs")
+    parser.add_argument(
+        "--cookie-samesite",
+        choices=("lax", "strict", "none"),
+        default=None,
+        help="Session cookie SameSite policy (default: lax, or SESSION_COOKIE_SAMESITE)",
+    )
+    parser.add_argument(
+        "--cookie-secure",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Mark the session cookie Secure (default: follows --cookie-samesite, or SESSION_COOKIE_SECURE)",
+    )
     args = parser.parse_args()
     data_dir = _data_dir(args.data_dir)
     config = _runtime_config(data_dir)
-    _configure_environment(args.port, data_dir, config)
+    cookie_samesite, cookie_secure = resolve_cookie_policy(args.cookie_samesite, args.cookie_secure)
+    _configure_environment(args.port, data_dir, config, cookie_samesite, cookie_secure)
     _configure_logging(data_dir)
+    logging.getLogger("marketplace-runtime").info(
+        "Listening on http://127.0.0.1:%s (session cookie SameSite=%s secure=%s)",
+        args.port,
+        cookie_samesite,
+        cookie_secure,
+    )
 
     import uvicorn
 

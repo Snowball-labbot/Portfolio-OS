@@ -214,7 +214,7 @@ export function ResearchDesk({ onNavigate }: ResearchDeskProps) {
       setGenerationStatus((current) => current ? { ...current, latest_run: run } : current);
     } catch (generationError) {
       setGeneratingKind(null);
-      setError(getErrorMessage(generationError, 'Agnes 简报生成失败'));
+      setError(getErrorMessage(generationError, '简报生成失败'));
     }
   };
 
@@ -226,7 +226,7 @@ export function ResearchDesk({ onNavigate }: ResearchDeskProps) {
       setGenerationStatus((current) => current ? { ...current, latest_run: run } : current);
     } catch (generationError) {
       setGeneratingKind(null);
-      setError(getErrorMessage(generationError, 'Agnes 每日新闻生成失败'));
+      setError(getErrorMessage(generationError, '每日新闻生成失败'));
     }
   };
 
@@ -361,14 +361,14 @@ export function ResearchDesk({ onNavigate }: ResearchDeskProps) {
 
       <section className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-ink-100 bg-white px-5 py-3.5 text-xs">
         <div className="flex items-center gap-2 font-semibold text-ink-800">
-          <Sparkles size={15} className="text-brand-600" /> Agnes 自动简报
+          <Sparkles size={15} className="text-brand-600" /> AI 自动简报
         </div>
         <div className="text-ink-400">最后同步 <span className="font-medium text-ink-700">{formatStatusTime(generationStatus?.last_sync_at)}</span></div>
         <div className="text-ink-400">最后持仓复盘 <span className="font-medium text-ink-700">{formatStatusTime(generationStatus?.latest_daily_review?.completed_at || generationStatus?.latest_success?.completed_at)}</span></div>
         <div className="text-ink-400">每日新闻 <span className="font-medium text-ink-700">{formatStatusTime(generationStatus?.latest_daily_news?.completed_at)}</span></div>
         <div className="text-ink-400">下次睡前复盘 <span className="font-medium text-ink-700">{formatStatusTime(generationStatus?.next_market_close_at)}</span></div>
         {!generationStatus?.ai_configured && (
-          <div className="text-amber-700">Agnes 未配置，数据同步不受影响</div>
+          <div className="text-amber-700" title="在「AI API」里配置任意 OpenAI 兼容端点（Base URL / API Key / 模型）后即可生成简报">AI 未配置，数据同步不受影响</div>
         )}
         {generationStatus?.latest_run?.status === 'failed' && (
           <div className="max-w-md truncate text-red-600" title={generationStatus.latest_run.error || undefined}>上次生成失败：{generationStatus.latest_run.error || '未知错误'}</div>

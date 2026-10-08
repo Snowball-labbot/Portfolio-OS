@@ -12,12 +12,15 @@
   "files": ["index.js", "client.js", "cordis.patch.yml", "README.md", "vendor"],
   "keywords": ["dsh-plugin", "deepseek-harness", "portfolio", "investment-research"],
   "dsh": {
-    "engines": { "dsh": ">=0.1.2-rc.1 <0.2.0" },
+    "engines": { "dsh": ">=0.1.2-rc.1 <0.2.0 || >=0.2.0-rc.1 <0.3.0" },
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": {
       "platform": "web",
       "inject": ["@deepseek-ai/dsh-client-connection"]
     }
+  },
+  "optionalDependencies": {
+    "@snowball-labbot/portfolio-os-win32-x64": "0.2.1"
   },
   "scripts": { "test": "node --test tests/plugin.node.mjs" },
   "engines": { "node": ">=22" },

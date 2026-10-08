@@ -31,7 +31,7 @@ jobs:
           npm run check
           npm run lint
           python -m pip install -r backend/requirements-marketplace.txt pytest
-          python -m pytest backend/tests/test_ai_settings.py backend/tests/test_auth_cookie.py backend/tests/test_portfolio_safety.py backend/tests/test_research_logic.py -q
+          python -m pytest backend/tests/test_ai_settings.py backend/tests/test_auth_cookie.py backend/tests/test_portfolio_safety.py backend/tests/test_research_briefing.py backend/tests/test_research_logic.py backend/tests/test_runtime_launcher.py -q
           Push-Location plugins/dsh-portfolio-os
           npm test
           Pop-Location

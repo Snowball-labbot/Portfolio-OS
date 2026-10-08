@@ -25,6 +25,25 @@ class FundamentalsNormalizationTests(TestCase):
         self.assertIsNone(_decimal(float("nan")))
 
 
+def _event(**overrides) -> SimpleNamespace:
+    fields = {
+        "id": "event-1",
+        "event_type": "macro",
+        "title": "美国消费者价格指数（CPI）",
+        "company_name": None,
+        "country": "US",
+        "source": "BLS",
+        "actual": None,
+        "consensus": None,
+        "scheduled_at": None,
+        "importance": 2,
+        "ticker": None,
+        "source_url": None,
+    }
+    fields.update(overrides)
+    return SimpleNamespace(**fields)
+
+
 class DecisionQueueTests(TestCase):
     def test_high_priority_event_precedes_missing_thesis(self) -> None:
         now = datetime.now(UTC)
@@ -55,6 +74,34 @@ class DecisionQueueTests(TestCase):
         self.assertEqual(queue[0]["id"], "event:event-1")
         self.assertEqual(queue[0]["priority"], 3)
         self.assertEqual(queue[1]["id"], "thesis:watch-1")
+
+    def test_naive_sqlite_timestamps_do_not_mix_with_aware_now(self) -> None:
+        now = datetime.now(UTC)
+        naive_due = (now + timedelta(hours=8)).replace(tzinfo=None)
+        naive_review = (now - timedelta(days=1)).replace(tzinfo=None)
+        watchlist = SimpleNamespace(
+            id="watch-1",
+            symbol="NVDA",
+            thesis="护城河",
+            next_review_at=naive_review,
+            ir_url=None,
+        )
+
+        queue = _decision_queue([_event(importance=3, scheduled_at=naive_due)], [watchlist], now)
+
+        # Same priority: earlier due date first.
+        self.assertEqual([item["id"] for item in queue], ["review:watch-1", "event:event-1"])
+        self.assertEqual(queue[0]["priority"], 3)
+        self.assertEqual(queue[1]["due_at"], naive_due)
+
+    def test_mixed_naive_and_aware_due_dates_still_sort(self) -> None:
+        now = datetime.now(UTC)
+        naive = _event(id="naive", scheduled_at=(now + timedelta(hours=2)).replace(tzinfo=None))
+        aware = _event(id="aware", scheduled_at=now + timedelta(hours=4))
+
+        queue = _decision_queue([naive, aware], [], now)
+
+        self.assertEqual([item["id"] for item in queue], ["event:naive", "event:aware"])
 
 
 class ResearchResilienceTests(TestCase):

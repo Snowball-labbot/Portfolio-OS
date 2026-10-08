@@ -10,12 +10,26 @@ from fastapi.responses import FileResponse
 from starlette.exceptions import HTTPException
 from starlette.staticfiles import StaticFiles
 
+from backend.config import get_settings
 from backend.main import app
 from .scheduler import run_scheduler
 
 
+RUNTIME_API_VERSION = 1
+
 stop_scheduler = Event()
 scheduler_thread: Thread | None = None
+
+
+@app.get("/api/runtime/capabilities", include_in_schema=False)
+def runtime_capabilities() -> dict:
+    settings = get_settings()
+    return {
+        "runtime": "native-sqlite",
+        "api_version": RUNTIME_API_VERSION,
+        "cookie_samesite": settings.session_cookie_samesite,
+        "cookie_secure": settings.session_cookie_secure,
+    }
 
 
 @app.on_event("startup")

@@ -11,6 +11,32 @@ Portfolio OS 的 DSH Desktop 市场插件。安装后会启动随包附带的 Wi
 
 无需 Docker、Python、Node.js 或源代码。数据默认保存在 `%LOCALAPPDATA%\PortfolioOS`，卸载插件不会自动删除用户数据。
 
+## 登录态与嵌入模式
+
+平台的 iframe 与宿主页面跨站，只接受 `SameSite=None; Secure` 的会话 Cookie。插件启动运行时时注入：
+
+```
+SESSION_COOKIE_SAMESITE=none
+SESSION_COOKIE_SECURE=true
+```
+
+等价命令行参数：`--cookie-samesite none --cookie-secure`。
+
+插件会先用 `/api/runtime/capabilities` 检查已在运行的实例：旧版本实例（Lax Cookie）不复用，
+改在其它可用端口启动，实际地址由状态接口的 `frontendUrl` 下发。要恢复旧的同站行为：
+
+```yaml
+embeddedCookies: false
+```
+
+工具栏的「浏览器打开」可在系统浏览器里以第一方身份打开同一地址。
+
+## 运行时的分发方式
+
+- Release 包内置 `vendor/portfolio-os-runtime`。
+- 源码（git）安装不含 `vendor/`：插件会查 npm 包 `@snowball-labbot/portfolio-os-win32-x64`（已声明为 optional dependency）。
+- 本地开发用下面的 `sourceDir`。
+
 ## 开发模式
 
 仓库开发时可在插件配置中增加：

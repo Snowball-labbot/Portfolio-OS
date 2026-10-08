@@ -5,7 +5,6 @@ import re
 import threading
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update
@@ -39,6 +38,9 @@ NEW_YORK = ZoneInfo("America/New_York")
 REPORT_KINDS = {"startup", "market_close", "bedtime", "catchup", "manual", "daily_news"}
 BRIEF_REPORT_KINDS = {"startup", "market_close", "bedtime", "catchup", "manual"}
 AUTOMATED_KINDS = {"startup", "market_close", "bedtime", "catchup", "daily_news"}
+# Tag on generated brief documents; the Agnes-era tag still matches for older documents.
+AUTO_BRIEF_TAG = "AI自动生成"
+LEGACY_AUTO_BRIEF_TAG = "Agnes自动生成"
 _source_refresh_lock = threading.Lock()
 
 
@@ -143,10 +145,13 @@ def next_market_close_at(now: datetime | None = None) -> datetime:
     raise RuntimeError("Unable to determine the next US market close")
 
 
-def agnes_is_configured() -> bool:
+def ai_is_configured() -> bool:
     settings = load_ai_config()
-    host = (urlparse(settings.base_url).hostname or "").lower()
-    return bool(settings.api_key and "agnes" in host)
+    return bool(settings.api_key and settings.base_url and settings.model)
+
+
+# Deprecated alias.
+agnes_is_configured = ai_is_configured
 
 
 def _json_default(value):
@@ -624,8 +629,8 @@ def _summary_from_markdown(content: str) -> str:
         line = re.sub(r"\[([^]]+)]\([^)]+\)", r"\1", line)
         line = re.sub(r"[*_`]", "", line).strip()
         if line:
-            return _clip(line, 180) or "Agnes 自动投研简报"
-    return "Agnes 自动投研简报"
+            return _clip(line, 180) or "自动投研简报"
+    return "自动投研简报"
 
 
 def _title(report_kind: str, period_start: date, period_end: date) -> str:
@@ -685,7 +690,7 @@ def queue_generation(
         period_start=period_start,
         period_end=period_end,
         status="queued",
-        provider="agnes",
+        provider=load_ai_config().provider or "agnes",
         model=load_ai_config().model,
     )
     db.add(run)
@@ -748,8 +753,8 @@ def execute_generation_run(run_id: str) -> ResearchGenerationRun:
         if user is None:
             raise ValueError("Research generation user not found")
         try:
-            if not agnes_is_configured():
-                raise AIConfigError("Agnes API is not configured for the backend")
+            if not ai_is_configured():
+                raise AIConfigError("AI API is not configured for the backend")
             refresh_report_sources()
             context = build_generation_context(db, user, run.report_kind, run.period_start, run.period_end)
             content = call_ai_chat(
@@ -779,8 +784,10 @@ def execute_generation_run(run_id: str) -> ResearchGenerationRun:
                     ResearchDocument.as_of_date == run.period_end,
                 )
             ).all()
-            document = next((item for item in candidates if
-                "Agnes自动生成" in (item.tags or []) and run.report_kind in (item.tags or [])
+            document = next((
+                item for item in candidates
+                if run.report_kind in (item.tags or [])
+                and (AUTO_BRIEF_TAG in (item.tags or []) or LEGACY_AUTO_BRIEF_TAG in (item.tags or []))
             ), None)
             if document is None:
                 document = ResearchDocument(user_id=user.id)
@@ -791,9 +798,9 @@ def execute_generation_run(run_id: str) -> ResearchGenerationRun:
             document.summary = summary
             document.content_markdown = content
             document.tags = (
-                ["每日新闻", "过去24小时", "Agnes自动生成", run.report_kind]
+                ["每日新闻", "过去24小时", AUTO_BRIEF_TAG, run.report_kind]
                 if is_daily_news
-                else ["每日简报", "持仓复盘", "Agnes自动生成", run.report_kind]
+                else ["每日简报", "持仓复盘", AUTO_BRIEF_TAG, run.report_kind]
             )
             document.source_url = None
             document.as_of_date = run.period_end
@@ -868,7 +875,7 @@ def generation_status(db: Session, user: User) -> dict:
     return {
         "automatic_enabled": settings.auto_brief_enabled and is_target_user,
         "is_target_user": is_target_user,
-        "ai_configured": agnes_is_configured(),
+        "ai_configured": ai_is_configured(),
         "provider": "Agnes",
         "model": load_ai_config().model,
         "last_sync_at": last_sync_at,
@@ -892,7 +899,7 @@ def _automatic_user(db: Session) -> User | None:
 
 def run_startup_generation(now: datetime | None = None) -> ResearchGenerationRun | None:
     settings = get_settings()
-    if not settings.auto_brief_enabled or not agnes_is_configured():
+    if not settings.auto_brief_enabled or not ai_is_configured():
         return None
     today = shanghai_today(now)
     with SessionLocal() as db:
@@ -914,7 +921,7 @@ def run_startup_generation(now: datetime | None = None) -> ResearchGenerationRun
 
 def run_daily_news_generation(now: datetime | None = None) -> ResearchGenerationRun | None:
     settings = get_settings()
-    if not settings.auto_brief_enabled or not agnes_is_configured():
+    if not settings.auto_brief_enabled or not ai_is_configured():
         return None
     today = shanghai_today(now)
     with SessionLocal() as db:
@@ -935,7 +942,7 @@ def run_market_close_generation(
     current = (now or now_utc()).astimezone(UTC)
     if (
         not settings.auto_brief_enabled
-        or not agnes_is_configured()
+        or not ai_is_configured()
     ):
         return None
     if require_schedule and current < market_close_at(current.astimezone(SHANGHAI).date()):

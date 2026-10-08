@@ -11,6 +11,8 @@ from sqlalchemy.pool import StaticPool
 from backend.database import Base
 from backend.models import Holding, ResearchDocument, ResearchFolder, ResearchGenerationRun, ResearchNewsItem, Transaction, User
 from backend.research.briefing import (
+    AUTO_BRIEF_TAG,
+    LEGACY_AUTO_BRIEF_TAG,
     build_transaction_events,
     build_generation_context,
     execute_generation_run,
@@ -144,13 +146,13 @@ class ResearchBriefingTests(TestCase):
         self.assertEqual(event["realized_gain_cny"], Decimal("-1148.04370063"))
         self.assertEqual(sum((row["flow_cny"] for row in event["flow_rows"]), Decimal("0")), Decimal("0"))
 
-    def test_successful_agnes_generation_publishes_and_updates_one_document(self) -> None:
+    def test_successful_generation_publishes_and_updates_one_document(self) -> None:
         run, _ = queue_generation(self.db, self.user, "startup", date(2026, 9, 4), date(2026, 9, 4))
         session_factory = lambda: Session(self.engine)
         report = "# 核心结论\n\n组合整体保持稳定。\n\n## 来源\n\n数据不足。"
         with (
             patch("backend.research.briefing.SessionLocal", session_factory),
-            patch("backend.research.briefing.agnes_is_configured", return_value=True),
+            patch("backend.research.briefing.ai_is_configured", return_value=True),
             patch("backend.research.briefing.refresh_report_sources"),
             patch("backend.research.briefing.call_ai_chat", return_value=report),
         ):
@@ -159,12 +161,12 @@ class ResearchBriefingTests(TestCase):
         self.assertEqual(result.status, "succeeded")
         documents = self.db.scalars(select(ResearchDocument).where(ResearchDocument.user_id == self.user.id)).all()
         self.assertEqual(len(documents), 1)
-        self.assertIn("Agnes自动生成", documents[0].tags)
+        self.assertIn(AUTO_BRIEF_TAG, documents[0].tags)
 
         close_run, _ = queue_generation(self.db, self.user, "market_close", date(2026, 9, 4), date(2026, 9, 4))
         with (
             patch("backend.research.briefing.SessionLocal", session_factory),
-            patch("backend.research.briefing.agnes_is_configured", return_value=True),
+            patch("backend.research.briefing.ai_is_configured", return_value=True),
             patch("backend.research.briefing.refresh_report_sources"),
             patch("backend.research.briefing.call_ai_chat", return_value=report + "\n\n收盘更新。"),
         ):
@@ -175,12 +177,42 @@ class ResearchBriefingTests(TestCase):
         self.assertEqual(len(documents), 2)
         self.assertTrue(any("美股收盘复盘" in document.title for document in documents))
 
+    def test_documents_tagged_by_older_builds_are_reused(self) -> None:
+        run, _ = queue_generation(self.db, self.user, "startup", date(2026, 9, 4), date(2026, 9, 4))
+        session_factory = lambda: Session(self.engine)
+        with (
+            patch("backend.research.briefing.SessionLocal", session_factory),
+            patch("backend.research.briefing.ai_is_configured", return_value=True),
+            patch("backend.research.briefing.refresh_report_sources"),
+            patch("backend.research.briefing.call_ai_chat", return_value="# 核心结论\n\n旧版生成的简报。"),
+        ):
+            execute_generation_run(run.id)
+
+        self.db.expire_all()
+        document = self.db.scalar(select(ResearchDocument).where(ResearchDocument.user_id == self.user.id))
+        document.tags = [tag for tag in document.tags if tag != AUTO_BRIEF_TAG] + [LEGACY_AUTO_BRIEF_TAG]
+        self.db.commit()
+
+        rerun, _ = queue_generation(self.db, self.user, "startup", date(2026, 9, 4), date(2026, 9, 4), force=True)
+        with (
+            patch("backend.research.briefing.SessionLocal", session_factory),
+            patch("backend.research.briefing.ai_is_configured", return_value=True),
+            patch("backend.research.briefing.refresh_report_sources"),
+            patch("backend.research.briefing.call_ai_chat", return_value="# 核心结论\n\n更新后的简报。"),
+        ):
+            execute_generation_run(rerun.id)
+
+        self.db.expire_all()
+        documents = self.db.scalars(select(ResearchDocument).where(ResearchDocument.user_id == self.user.id)).all()
+        self.assertEqual(len(documents), 1)
+        self.assertIn(AUTO_BRIEF_TAG, documents[0].tags)
+
     def test_failed_generation_keeps_a_retryable_status(self) -> None:
         run, _ = queue_generation(self.db, self.user, "manual", date(2026, 9, 4), date(2026, 9, 4))
         session_factory = lambda: Session(self.engine)
         with (
             patch("backend.research.briefing.SessionLocal", session_factory),
-            patch("backend.research.briefing.agnes_is_configured", return_value=True),
+            patch("backend.research.briefing.ai_is_configured", return_value=True),
             patch("backend.research.briefing.refresh_report_sources"),
             patch("backend.research.briefing.call_ai_chat", side_effect=RuntimeError("temporary failure")),
         ):
@@ -226,7 +258,7 @@ class ResearchBriefingTests(TestCase):
         session_factory = lambda: Session(self.engine)
         with (
             patch("backend.research.briefing.SessionLocal", session_factory),
-            patch("backend.research.briefing.agnes_is_configured", return_value=True),
+            patch("backend.research.briefing.ai_is_configured", return_value=True),
             patch("backend.research.briefing.refresh_report_sources"),
             patch("backend.research.briefing.call_ai_chat", return_value="# 每日新闻\n\n只有一条相关资讯。"),
         ):

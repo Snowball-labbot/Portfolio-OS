@@ -46,6 +46,7 @@ window.__ModuleLoader__.load({
       this.retryButton = null;
       this.restartButton = null;
       this.reloadButton = null;
+      this.externalButton = null;
       this.iframeLoaded = false;
       this.frameBaseUrl = null;
       this.iframeLoadTimer = null;
@@ -63,11 +64,13 @@ window.__ModuleLoader__.load({
       var root = document.createElement('section');
       root.setAttribute('data-dsh-portfolio-app', '');
       root.setAttribute('aria-hidden', 'true');
+      // Stay below the Desktop caption; the shell publishes the content box as CSS variables.
       root.style.cssText = [
-        'display:none', 'position:fixed', 'inset:0', 'z-index:2147483000',
-        'width:100vw', 'height:100vh', 'min-width:980px', 'background:#f4f6f8',
-        'color:#111827', 'box-sizing:border-box', 'overflow:hidden',
-        'flex-direction:column', 'font:13px/1.4 system-ui,sans-serif',
+        'display:none', 'position:fixed', 'z-index:2147483000',
+        'top:var(--dsh-desktop-content-top, 0px)', 'left:0', 'right:0',
+        'height:var(--dsh-desktop-content-height, 100vh)', 'min-width:980px',
+        'background:#f4f6f8', 'color:#111827', 'box-sizing:border-box',
+        'overflow:hidden', 'flex-direction:column', 'font:13px/1.4 system-ui,sans-serif',
       ].join(';');
 
       var toolbar = document.createElement('header');
@@ -98,13 +101,16 @@ window.__ModuleLoader__.load({
       var retry = createButton('重试启动');
       var restart = createButton('重启服务');
       var reload = createButton('刷新页面', '重新加载资产投研网页');
+      var external = createButton('浏览器打开', '在系统浏览器中打开资产投研（独立窗口，登录态最稳）');
       retry.addEventListener('click', this.action.bind(this, 'start'));
       restart.addEventListener('click', this.action.bind(this, 'restart'));
       reload.addEventListener('click', this.reloadFrame.bind(this));
-      actions.append(retry, restart, reload);
+      external.addEventListener('click', this.openExternal.bind(this));
+      actions.append(retry, restart, reload, external);
       this.retryButton = retry;
       this.restartButton = restart;
       this.reloadButton = reload;
+      this.externalButton = external;
       toolbar.append(back, divider, title, dot, statusText, actions);
 
       var stage = document.createElement('div');
@@ -142,6 +148,7 @@ window.__ModuleLoader__.load({
       this.retryButton.style.display = failed ? '' : 'none';
       this.restartButton.style.display = ready || failed ? '' : 'none';
       this.reloadButton.style.display = ready || failed ? '' : 'none';
+      this.externalButton.style.display = ready || failed ? '' : 'none';
       if (ready || (this.iframeAppReady && !failed)) {
         var nextUrl = this.status.frontendUrl || DEFAULT_URL;
         if (ready && (this.frameBaseUrl !== nextUrl || this.iframe.getAttribute('src') === 'about:blank')) {
@@ -239,6 +246,17 @@ window.__ModuleLoader__.load({
         return;
       }
       this.loadFrame(this.status.frontendUrl || DEFAULT_URL);
+    };
+
+    // Open the same address as a top-level page when the embedded session is unavailable.
+    PortfolioShell.prototype.openExternal = function () {
+      var url = (this.status && this.status.frontendUrl) || DEFAULT_URL;
+      var bridge = window.dshDesktop && window.dshDesktop.openExternalUrl;
+      if (typeof bridge === 'function') {
+        Promise.resolve(bridge(url)).catch(function () { window.open(url, '_blank'); });
+        return;
+      }
+      window.open(url, '_blank');
     };
 
     PortfolioShell.prototype.resetFrame = function () {

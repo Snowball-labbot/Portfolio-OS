@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
 from ..database import SessionLocal, get_db
-from ..dependencies import get_current_user
+from ..dependencies import as_aware_utc, get_current_user
 from ..models import (
     Holding,
     ResearchAttachment,
@@ -63,7 +63,7 @@ from ..research.service import (
 from ..research.fundamentals import FundamentalsError, get_company_fundamentals
 from ..research.briefing import (
     BRIEF_REPORT_KINDS,
-    agnes_is_configured,
+    ai_is_configured,
     execute_generation_run,
     generation_status,
     is_us_market_session,
@@ -211,9 +211,11 @@ def _decision_queue(
 ) -> list[dict]:
     queue: list[dict] = []
     for event in events:
-        due_at = event.scheduled_at
-        if event.importance < 2 or not due_at:
+        scheduled_at = event.scheduled_at
+        if event.importance < 2 or not scheduled_at:
             continue
+        # SQLite stores these columns without an offset: normalize before comparing with an aware now.
+        due_at = as_aware_utc(scheduled_at)
         hours_until = (due_at - now).total_seconds() / 3600
         if hours_until > 72 or hours_until < -12:
             continue
@@ -227,15 +229,16 @@ def _decision_queue(
                 f"{event.company_name or event.country or event.source} · "
                 f"实际 {event.actual or '待发布'} / 预期 {event.consensus or '未提供'}"
             ),
-            "due_at": due_at,
+            "due_at": scheduled_at,
             "symbol": event.ticker,
             "target_view": "research",
             "source_url": event.source_url,
         })
 
     for item in watchlist:
-        if item.next_review_at and item.next_review_at <= now + timedelta(days=7):
-            overdue = item.next_review_at < now
+        review_at = as_aware_utc(item.next_review_at) if item.next_review_at else None
+        if review_at and review_at <= now + timedelta(days=7):
+            overdue = review_at < now
             queue.append({
                 "id": f"review:{item.id}",
                 "kind": "review",
@@ -261,7 +264,7 @@ def _decision_queue(
             })
 
     def sort_key(item: dict) -> tuple:
-        due = item["due_at"] or datetime.max.replace(tzinfo=UTC)
+        due = as_aware_utc(item["due_at"]) if item["due_at"] else datetime.max.replace(tzinfo=UTC)
         return (-item["priority"], due, item["title"])
 
     return sorted(queue, key=sort_key)[:10]
@@ -516,10 +519,10 @@ def generate_research_brief(
     user: User = Depends(get_current_user),
     db: DbSession = Depends(get_db),
 ) -> ResearchGenerationRun:
-    if not agnes_is_configured():
+    if not ai_is_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Agnes API is not configured. Open the platform from the DSH research profile or configure Agnes for the backend.",
+            detail="AI API is not configured. Configure any OpenAI-compatible endpoint in the AI API dialog first.",
         )
     if payload.kind == "market_close" and payload.period_start is None and payload.period_end is None:
         period_end = latest_completed_us_session()
